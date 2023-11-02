@@ -262,10 +262,10 @@ class PostProcessCocoYolo:
                 detection[0] = ds.image_ids[image_idx]
                 height, width = ds.image_sizes[image_idx]
                 # pycoco wants {imageID,x1,y1,w,h,score,class}
-                detection[3] *= max(width, height) / 640
-                detection[4] *= max(width, height) / 640
-                detection[1] *= max(width, height) / 640
-                detection[2] *= max(width, height) / 640
+                detection[3] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
+                detection[4] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
+                detection[1] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
+                detection[2] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
 
                 if width < height:
                     detection[1] -= (height - width) / 2
