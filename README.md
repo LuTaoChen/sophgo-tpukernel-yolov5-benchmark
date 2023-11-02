@@ -36,6 +36,7 @@ git checkout dev
 ## Inference
 For example
 ```shell
+export TPUKERNEL_DIR=/path/to/dir/libbm1684x_kernel_module.so
 python run.py --model=yolov5.bmodel --dataset_name="coco-640" --accuracy
 ```
 参数说明：
