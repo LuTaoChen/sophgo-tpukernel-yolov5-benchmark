@@ -97,6 +97,9 @@ class RunnerBase:
     def finish(self):
         pass
 
+    def wait_for_response(self):
+        while len(self.waiting_queries) != 0:
+            time.sleep(2)
 
 class QueueRunner(RunnerBase):
     def __init__(self, model, ds, threads, post_proc=None):

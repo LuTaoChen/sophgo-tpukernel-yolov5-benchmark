@@ -40,7 +40,8 @@ def get_args():
     parser.add_argument("--threads", default=os.cpu_count(), type=int, help="threads")
     parser.add_argument("--save_result", action="store_true", help="save detected results")
     parser.add_argument("--output", default="output", help="test results")
-
+    parser.add_argument("--performance-count", default=100, type=int,
+                        help="performance sample count while acc mode & offline")
 
     args = parser.parse_args()
     return args
@@ -54,30 +55,37 @@ class QuerySample():
 
 # control the timing to send query
 def load_gen(config, runner, dl):
-    query_id_counter = 10000
+    count = config['total_count']
+    query_id_counter = max(100000, count)
     if config['scenario'] is not 'Offline':
         return
     elif config['scenario'] is 'Offline':
-        dl.load_query_samples([i for i in range(len(dl))])
+        all_list = [i for i in range(len(dl))]
+        dl.load_query_samples(all_list)
         queries = []
         if config['accuracy'] is not None:
-            for n, item in enumerate(dl.input_list_inmemory):
-                runner.waiting_queries[query_id_counter] = ''
-                queries.append(QuerySample(n, query_id_counter))
-                query_id_counter += 1
-            runner.enqueue(queries)
+            performance_count = min(len(dl), config['performance_count'])
+            random.shuffle(all_list)
+            import math
+            for i in range(math.ceil(count / performance_count)):
+                queries.clear()
+                end = min((i + 1) * performance_count, len(dl))
+                for n in all_list[i * performance_count: end]:
+                    runner.waiting_queries[query_id_counter] = ''
+                    queries.append(QuerySample(n, query_id_counter))
+                    query_id_counter += 1
+                runner.enqueue(queries)
+                runner.wait_for_response()
         else:
-            count = config['total_count']
             for i in range(count):
                 idx = random.choices([i for i in range(len(dl))])
                 runner.waiting_queries[query_id_counter] = ''
                 queries.append(QuerySample(idx, query_id_counter))
                 query_id_counter += 1
             runner.enqueue(queries)
+            runner.wait_for_response()
     else:
         return
-    while len(runner.waiting_queries) != 0:
-        time.sleep(2)
     runner.finish()
 
 
@@ -137,6 +145,7 @@ def main():
     config = {
         "accuracy": args.accuracy,
         "total_count": args.count,
+        "performance_count": args.performance_count if args.performance_count else args.count,
         "scenario": args.scenario
     }
     image_format = args.data_format if args.data_format else 'NCHW'
@@ -154,7 +163,6 @@ def main():
     dl.model_info = runner.info
 
     # warmup
-    import numpy as np
     sample_ids = [0]
     dl.load_query_samples(sample_ids)
     for _ in range(1):

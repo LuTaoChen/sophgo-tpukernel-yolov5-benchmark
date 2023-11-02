@@ -13,6 +13,7 @@ import pycocotools.coco as pycoco
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("coco")
 
+
 class coco_loader(dataset.Dataset):
     def __init__(self,
                  count,
