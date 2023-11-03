@@ -42,6 +42,7 @@ def get_args():
     parser.add_argument("--output", default="output", help="test results")
     parser.add_argument("--performance-count", default=100, type=int,
                         help="performance sample count while acc mode & offline")
+    parser.add_argument("--seed", default=123, type=int, help="seed in all random function")
 
     args = parser.parse_args()
     return args
@@ -57,6 +58,7 @@ class QuerySample():
 def load_gen(config, runner, dl):
     count = config['total_count']
     query_id_counter = max(100000, count)
+    random.seed(config['seed'])
     if config['scenario'] is not 'Offline':
         return
     elif config['scenario'] is 'Offline':
@@ -146,7 +148,8 @@ def main():
         "accuracy": args.accuracy,
         "total_count": args.count,
         "performance_count": args.performance_count if args.performance_count else args.count,
-        "scenario": args.scenario
+        "scenario": args.scenario,
+        "seed": args.seed
     }
     image_format = args.data_format if args.data_format else 'NCHW'
     wanted_dataset, pre_proc, post_proc, kwargs = SUPPORTED_DATASETS[args.dataset_name]
