@@ -104,6 +104,7 @@ class coco_loader(dataset.Dataset):
             if self.count and len(self.image_list) >= self.count:
                 break
 
+        self.count = min(len(self.image_list), self.count)
         time_taken = time.time() - start
         if not self.image_list:
             log.error("no images in image list found")

@@ -196,8 +196,8 @@ def main():
     add_results(final_results, "{}".format(args.scenario),
                 result_dict, last_timeing, time.time() - dl.last_loaded, args.accuracy)
 
-
     print("Done!")
+
 
 if __name__ == "__main__":
     main()
