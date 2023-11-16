@@ -30,12 +30,15 @@ class Item:
 
 
 class RunnerBase:
-    def __init__(self, model, ds, threads, post_proc=None):
+    def __init__(self, model, ds, threads, post_proc=None, tpu_kernel=None):
         self.take_accuracy = False
         self.ds = ds
         self.model = model
-        # self.runner = SGInfer(model)
-        self.runner = SGInfer(model, 1, None, tpu_kernel='tpu_kernel_api_yolov5_detect_out')
+        if tpu_kernel:
+            # tpu_kernel = "tpu_kernel_api_yolov5_detect_out"
+            self.runner = SGInfer(model, 1, None, tpu_kernel=tpu_kernel)
+        else:
+            self.runner = SGInfer(model)
         self.post_process = post_proc
         self.threads = threads
         self.take_accuracy = False
@@ -67,8 +70,7 @@ class RunnerBase:
             for _ in qitem.query_id:
                 self.result_timing.append(took)
         except Exception as ex:
-            processed_results = np.array([-1]*7)
-            self.post_process.add_results(processed_results)
+            pass
         finally:
             for idx, query_id in enumerate(qitem.query_id):
                 self.waiting_queries.pop(query_id)
@@ -101,9 +103,10 @@ class RunnerBase:
         while len(self.waiting_queries) != 0:
             time.sleep(2)
 
+
 class QueueRunner(RunnerBase):
-    def __init__(self, model, ds, threads, post_proc=None):
-        super().__init__(model, ds, threads, post_proc)
+    def __init__(self, model, ds, threads, post_proc=None, tpu_kernel=None):
+        super().__init__(model, ds, threads, post_proc, tpu_kernel)
         self.query_samples = []
         self.result_dict = {}
         self.task_map = {}

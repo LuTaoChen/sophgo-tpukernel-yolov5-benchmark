@@ -43,6 +43,7 @@ def get_args():
     parser.add_argument("--performance-count", default=100, type=int,
                         help="performance sample count while acc mode & offline")
     parser.add_argument("--seed", default=123, type=int, help="seed in all random function")
+    parser.add_argument("--tpu-kernel", type=str, help="Utilize tpu kernel as post-process")
 
     args = parser.parse_args()
     return args
@@ -59,9 +60,9 @@ def load_gen(config, runner, dl):
     count = config['total_count']
     query_id_counter = max(100000, count)
     random.seed(config['seed'])
-    if config['scenario'] is not 'Offline':
+    if config['scenario'] != 'Offline':
         return
-    elif config['scenario'] is 'Offline':
+    elif config['scenario'] == 'Offline':
         all_list = [i for i in range(len(dl))]
         dl.load_query_samples(all_list)
         queries = []
@@ -93,9 +94,9 @@ def load_gen(config, runner, dl):
 
 def get_runner(args, ds, post_proc):
     if args.scenario == 'Offline':
-        return QueueRunner(args.model, ds, args.threads, post_proc=post_proc)
+        return QueueRunner(args.model, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
     elif args.scenario == 'SingleStream':
-        return RunnerBase(args.model, ds, args.threads, post_proc=post_proc)
+        return RunnerBase(args.model, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
 
 
 def add_results(final_results, name, result_dict, result_list, took, show_accuracy=False):
