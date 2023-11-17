@@ -49,6 +49,7 @@ class RunnerBase:
         self.result_timing = []
         self.label_offset = 1
         self.waiting_queries = {}
+        self.respond_cond = threading.Condition()
 
     def handle_tasks(self, tasks_queue):
         pass
@@ -74,6 +75,9 @@ class RunnerBase:
         finally:
             for idx, query_id in enumerate(qitem.query_id):
                 self.waiting_queries.pop(query_id)
+            if len(self.waiting_queries) == 0:
+                with self.respond_cond:
+                    self.respond_cond.notify()
 
     def run_one_item(self, qitem):
         # run the prediction
@@ -100,8 +104,8 @@ class RunnerBase:
         pass
 
     def wait_for_response(self):
-        while len(self.waiting_queries) != 0:
-            time.sleep(2)
+        with self.respond_cond:
+            self.respond_cond.wait()
 
 
 class QueueRunner(RunnerBase):

@@ -60,33 +60,43 @@ def load_gen(config, runner, dl):
     count = config['total_count']
     query_id_counter = max(100000, count)
     random.seed(config['seed'])
-    if config['scenario'] != 'Offline':
+    if config['scenario'] == 'SingleStream':
         return
     elif config['scenario'] == 'Offline':
         all_list = [i for i in range(len(dl))]
-        dl.load_query_samples(all_list)
         queries = []
+        import math
+        performance_count = min(len(dl), config['performance_count'])
         if config['accuracy'] is not None:
-            performance_count = min(len(dl), config['performance_count'])
             random.shuffle(all_list)
-            import math
             for i in range(math.ceil(count / performance_count)):
                 queries.clear()
                 end = min((i + 1) * performance_count, len(dl))
+                performance_list = []
                 for n in all_list[i * performance_count: end]:
+                    performance_list.append(n)
                     runner.waiting_queries[query_id_counter] = ''
                     queries.append(QuerySample(n, query_id_counter))
                     query_id_counter += 1
+                dl.load_query_samples(performance_list)
                 runner.enqueue(queries)
                 runner.wait_for_response()
+                dl.unload_query_samples()
         else:
-            for i in range(count):
-                idx = random.choices([i for i in range(len(dl))])
-                runner.waiting_queries[query_id_counter] = ''
-                queries.append(QuerySample(idx, query_id_counter))
-                query_id_counter += 1
-            runner.enqueue(queries)
-            runner.wait_for_response()
+            for i in range(math.ceil(count / performance_count)):
+                queries.clear()
+                end = min((i + 1) * performance_count, count)
+                performance_list = []
+                for _ in range(i * performance_count, end):
+                    idx = random.choices(all_list)
+                    performance_list.append(idx)
+                    runner.waiting_queries[query_id_counter] = ''
+                    queries.append(QuerySample(idx, query_id_counter))
+                    query_id_counter += 1
+                dl.load_query_samples(performance_list)
+                runner.enqueue(queries)
+                runner.wait_for_response()
+                dl.unload_query_samples()
     else:
         return
     runner.finish()

@@ -139,6 +139,7 @@ class coco_loader(dataset.Dataset):
     def __next__(self):
         pass
 
+
 def resize_with_aspectratio_padding(img, out_height, out_width, inter_pol=cv2.INTER_LINEAR, color=(114, 114, 114)):
     height, width, _ = img.shape
     if width > height:

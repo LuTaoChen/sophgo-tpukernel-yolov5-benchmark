@@ -63,7 +63,7 @@ class Dataset():
         print('load query samples done, with {} image inmemory'.format(len(self.input_list_inmemory)))
         time.sleep(0.1)
 
-    def unload_query_samples(self, sample_list):
+    def unload_query_samples(self, sample_list=None):
         if sample_list:
             for sample in sample_list:
                 if sample in self.input_list_inmemory :

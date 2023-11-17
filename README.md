@@ -39,9 +39,13 @@ For example
 export TPUKERNEL_DIR=/path/to/dir/libbm1684x_kernel_module.so
 python run.py --model=yolov5.bmodel --dataset_name="coco-640" --accuracy
 ```
-参数说明：
---accuracy: 是否打开计算精度
---count: 运行的样本数，计算精度时最多为10833
---model: 模型路径
---dataset_name: 数据集配置
 
+参数说明：
+
+--accuracy: 是否打开计算精度
+
+--count: 运行的样本数
+
+--model: 模型路径
+
+--dataset_name: 数据集配置
