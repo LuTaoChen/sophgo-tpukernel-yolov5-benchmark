@@ -30,13 +30,13 @@ class Item:
 
 
 class RunnerBase:
-    def __init__(self, model, ds, threads, post_proc=None, tpu_kernel=None):
+    def __init__(self, model, devices, ds, threads, post_proc=None, tpu_kernel=None):
         self.take_accuracy = False
         self.ds = ds
         self.model = model
         if tpu_kernel:
             # tpu_kernel = "tpu_kernel_api_yolov5_detect_out"
-            self.runner = SGInfer(model, 1, None, tpu_kernel=tpu_kernel)
+            self.runner = SGInfer(model, 1, devices=devices, tpu_kernel=tpu_kernel)
         else:
             self.runner = SGInfer(model)
         self.post_process = post_proc
@@ -109,8 +109,8 @@ class RunnerBase:
 
 
 class QueueRunner(RunnerBase):
-    def __init__(self, model, ds, threads, post_proc=None, tpu_kernel=None):
-        super().__init__(model, ds, threads, post_proc, tpu_kernel)
+    def __init__(self, model, devices, ds, threads, post_proc=None, tpu_kernel=None):
+        super().__init__(model, devices, ds, threads, post_proc, tpu_kernel)
         self.query_samples = []
         self.result_dict = {}
         self.task_map = {}

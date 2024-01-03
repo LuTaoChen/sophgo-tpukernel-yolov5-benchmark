@@ -26,12 +26,21 @@ last_timeing = []
 
 
 def get_args():
+    def parse_card_id(value):
+        try:
+            card_ids = [int(x) for x in value.split(',')]
+            return card_ids
+        except ValueError:
+            raise argparse.ArgumentTypeError("Invalid card ID. Please provide a comma-separated list of integers.")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="/mnt/onager/source/datasets/coco", help="data file path")
     parser.add_argument("--dataset_name", choices=SUPPORTED_DATASETS.keys(),
                         default="coco-640", help="dataset config name")
     parser.add_argument("--scenario", choices=["SingleStream", "Offline"], default="Offline", help="Scenario")
     parser.add_argument("--accuracy", action="store_true", help="enable accuracy pass")
+    parser.add_argument("--devices", type=parse_card_id, default=[0],
+                        help='A comma-separated list of TPU IDs. Default is [0].')
     parser.add_argument("--count", type=int, default=50, help="Maximum number of examples to consider")
     parser.add_argument("--model", type=str, help="bmodel path")
     parser.add_argument("--cache_path", default=None, help="pickle path")
@@ -57,7 +66,7 @@ class QuerySample():
 
 # control the timing to send query
 def load_gen(config, runner, dl):
-    count = config['total_count']
+    count = min(len(dl), config['total_count'])
     query_id_counter = max(100000, count)
     random.seed(config['seed'])
     if config['scenario'] == 'SingleStream':
@@ -104,9 +113,9 @@ def load_gen(config, runner, dl):
 
 def get_runner(args, ds, post_proc):
     if args.scenario == 'Offline':
-        return QueueRunner(args.model, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
+        return QueueRunner(args.model, args.devices, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
     elif args.scenario == 'SingleStream':
-        return RunnerBase(args.model, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
+        return RunnerBase(args.model, args.devices, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
 
 
 def add_results(final_results, name, result_dict, result_list, took, show_accuracy=False):
