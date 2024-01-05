@@ -1,14 +1,10 @@
 import cv2
 import numpy as np
-import collections
 import os
-import pickle
 import dataset
 import time
 import json
 import logging
-from pycocotools.cocoeval import COCOeval
-import pycocotools.coco as pycoco
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("coco")
@@ -158,6 +154,7 @@ def resize_with_aspectratio_padding(img, out_height, out_width, inter_pol=cv2.IN
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
     return img
 
+
 def pre_process_coco_yolov5(img, dims=None, need_transpose=False):
     new_h, new_w, _ = dims
     img = resize_with_aspectratio_padding(img, new_h, new_w)
@@ -186,138 +183,3 @@ def get_dataloader(count,
                        pre_process=pre_process,
                        **kwargs)
 
-
-class PostProcessCocoYolo:
-    """
-    Postprocessing required by yolov5
-    """
-    def __init__(self, use_inv_map, score_threshold=0.5):
-        super().__init__()
-        self.use_inv_map = use_inv_map
-        self.score_threshold = score_threshold
-        self.results = []
-        self.good = 0
-        self.total = 0
-        self.content_ids = []
-
-    def add_results(self, results):
-        self.results.extend(results)
-
-    def __call__(self, results, ids, expected=None, result_dict=None, label_offset=0):
-        processed_results = []
-        if len(results) == 2:
-            batch_result = results[0]
-            dt_num = results[1][0]
-        elif len(results) == 1:
-            dt_num = len(results[0][0, 0])
-            batch_result = results[0]
-
-        det_boxes = batch_result[0, 0]
-        for i in range(len(det_boxes)):
-            det_box = det_boxes[None, i]
-            if dt_num == 0 or (len(det_box) == 1 and det_box[0, 0] == -1):
-                raise ValueError
-            xywh, prob, cls = det_box[:, 3:7], det_box[:, 2:3], det_box[:, 1:2] + 1
-            xywh = np.concatenate((xywh[:, 0:2] - xywh[:, 2:] / 2, xywh[:, 2:]), axis=1)
-            bidx = int(det_box[0, 0])
-            det_box = np.concatenate((np.ones_like(cls) * ids[bidx], xywh, prob, cls), axis=1)
-            processed_results.append(det_box)
-            expected_classes = expected[bidx][0]
-            self.content_ids.append(ids[bidx])
-            detection_class = int(det_box[0, 6])
-            if detection_class in expected_classes:
-                self.good += 1
-            self.total += 1
-        return processed_results
-
-    def start(self):
-        self.results = []
-        self.good = 0
-        self.total = 0
-
-    def finalize(self, result_dict, ds=None, output_dir=None, save_result=False):
-        result_dict["good"] += self.good
-        result_dict["total"] += self.total
-
-        if self.use_inv_map:
-            # for pytorch
-            label_map = {}
-            with open(ds.annotation_file) as fin:
-                annotations = json.load(fin)
-            for cnt, cat in enumerate(annotations["categories"]):
-                label_map[cat["id"]] = cnt + 1
-            inv_map = {v: k for k, v in label_map.items()}
-
-        detections = []
-        image_indices = []
-        for batch in range(0, len(self.results)):
-            image_indices.append(self.content_ids[batch])
-            if save_result:
-                path = ds.data_path + '/' + ds.image_list[self.content_ids[batch]]
-                img = cv2.imread(path)
-            for idx in range(0, len(self.results[batch])):
-                detection = self.results[batch][idx]
-                # this is the index of the coco image
-                image_idx = int(detection[0])
-                if image_idx != self.content_ids[batch]:
-                    # working with the coco index/id is error prone - extra check to make sure it is consistent
-                    log.error("image_idx missmatch, lg={} / result={}".format(image_idx, self.content_ids[batch]))
-                # map the index to the coco image id
-                detection[0] = ds.image_ids[image_idx]
-                height, width = ds.image_sizes[image_idx]
-                # pycoco wants {imageID,x1,y1,w,h,score,class}
-                detection[3] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
-                detection[4] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
-                detection[1] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
-                detection[2] *= max(width, height) / max(ds.image_size[0], ds.image_size[1])
-
-                if width < height:
-                    detection[1] -= (height - width) / 2
-                else:
-                    detection[2] -= (width - height) / 2
-
-                if self.use_inv_map:
-                    cat_id = inv_map.get(int(detection[6]), -1)
-                    if cat_id == -1:
-                        # FIXME:
-                        log.info("finalize can't map category {}".format(int(detection[6])))
-                    detection[6] = cat_id
-
-                if save_result:
-                    xmax = detection[1] + detection[3]
-                    ymax = detection[2] + detection[4]
-                    box = [detection[1], detection[2], xmax, ymax]
-                    img = self.draw_rectangle(img, box, str(cat_id))
-                detections.append(np.array(detection))
-            if save_result:
-                ret = cv2.imwrite(output_dir + '/' + ds.image_list[self.content_ids[batch]][-16:], img)
-
-        # map indices to coco image id's
-        image_ids = [ds.image_ids[i] for i in image_indices]
-        self.results = []
-        cocoGt = pycoco.COCO(ds.annotation_file)
-        cocoDt = cocoGt.loadRes(np.array(detections))
-        cocoEval = COCOeval(cocoGt, cocoDt, iouType='bbox')
-        cocoEval.params.imgIds = image_ids
-        cocoEval.evaluate()
-        cocoEval.accumulate()
-        cocoEval.summarize()
-        result_dict["mAP"] = cocoEval.stats[0]
-
-    def draw_rectangle(self, img, box, label='', color=(128, 0, 128), txt_color=(255, 255, 255), path=None):
-        p1, p2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
-        lw = max(round(sum(img.shape) / 2 * 0.003), 2)
-        cv2.rectangle(img, p1, p2, color, thickness=lw, lineType=cv2.LINE_AA)
-        tf = max(lw - 1, 1)  # font thickness
-        w, h = cv2.getTextSize(label, 0, fontScale=lw / 3, thickness=tf)[0]  # text width, height
-        outside = p1[1] - h >= 3
-        p2 = p1[0] + w, p1[1] - h - 3 if outside else p1[1] + h + 3
-        cv2.rectangle(img, p1, p2, color, -1, cv2.LINE_AA)  # filled
-        cv2.putText(img,
-                    label, (p1[0], p1[1] - 2 if outside else p1[1] + h + 2),
-                    0,
-                    lw / 3,
-                    txt_color,
-                    thickness=tf,
-                    lineType=cv2.LINE_AA)
-        return img

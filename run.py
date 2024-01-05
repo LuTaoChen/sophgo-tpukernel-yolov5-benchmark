@@ -4,21 +4,29 @@ import argparse
 import time
 import numpy as np
 import dataloder
+import postprocess
 from dataloder import get_dataloader
 import random
-from yolov5_runner import QueueRunner, RunnerBase
+from yolov5_runner import QueueRunner, RunnerBase, sgtype, nptype
+from typing import List
 
 sys.path.insert(0, os.getcwd())
 
 SUPPORTED_DATASETS = {
     "coco-640":
-        (dataloder.coco_loader, dataloder.pre_process_coco_yolov5, dataloder.PostProcessCocoYolo(True, 0.05),
+        (dataloder.coco_loader,
+         dataloder.pre_process_coco_yolov5,
+         postprocess.PostProcessCocoYolo(True, 0.01, 0.5),
          {"image_size": [640, 640, 3], "use_label_map": True}),
     "coco-544":
-        (dataloder.coco_loader, dataloder.pre_process_coco_yolov5, dataloder.PostProcessCocoYolo(True, 0.05),
+        (dataloder.coco_loader,
+         dataloder.pre_process_coco_yolov5,
+         postprocess.PostProcessCocoYolo(True, 0.01, 0.5),
          {"image_size": [544, 544, 3], "use_label_map": True}),
     "coco-custom":
-        (dataloder.coco_loader, dataloder.pre_process_coco_yolov5, dataloder.PostProcessCocoYolo(True, 0.05),
+        (dataloder.coco_loader,
+         dataloder.pre_process_coco_yolov5,
+         postprocess.PostProcessCocoYolo(True, 0.01, 0.5),
          {"image_size": [128, 1024, 3], "use_label_map": True})
 }
 
@@ -66,6 +74,13 @@ class QuerySample():
 
 # control the timing to send query
 def load_gen(config, runner, dl):
+    def run_query(queries: List[QuerySample]):
+        performance_list = [q.index for q in queries]
+        dl.load_query_samples(performance_list)
+        runner.enqueue(queries)
+        runner.wait_for_response()
+        dl.unload_query_samples()
+
     count = min(len(dl), config['total_count'])
     query_id_counter = max(100000, count)
     random.seed(config['seed'])
@@ -81,31 +96,21 @@ def load_gen(config, runner, dl):
             for i in range(math.ceil(count / performance_count)):
                 queries.clear()
                 end = min((i + 1) * performance_count, len(dl))
-                performance_list = []
                 for n in all_list[i * performance_count: end]:
-                    performance_list.append(n)
                     runner.waiting_queries[query_id_counter] = ''
                     queries.append(QuerySample(n, query_id_counter))
                     query_id_counter += 1
-                dl.load_query_samples(performance_list)
-                runner.enqueue(queries)
-                runner.wait_for_response()
-                dl.unload_query_samples()
+                run_query(queries)
         else:
             for i in range(math.ceil(count / performance_count)):
                 queries.clear()
                 end = min((i + 1) * performance_count, count)
-                performance_list = []
                 for _ in range(i * performance_count, end):
                     idx = random.choices(all_list)
-                    performance_list.append(idx)
                     runner.waiting_queries[query_id_counter] = ''
                     queries.append(QuerySample(idx, query_id_counter))
                     query_id_counter += 1
-                dl.load_query_samples(performance_list)
-                runner.enqueue(queries)
-                runner.wait_for_response()
-                dl.unload_query_samples()
+                run_query(queries)
     else:
         return
     runner.finish()
@@ -113,9 +118,20 @@ def load_gen(config, runner, dl):
 
 def get_runner(args, ds, post_proc):
     if args.scenario == 'Offline':
-        return QueueRunner(args.model, args.devices, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
+        return QueueRunner(args.model,
+                           args.devices,
+                           ds,
+                           args.threads,
+                           post_proc=post_proc,
+                           tpu_kernel=args.tpu_kernel,
+                           )
     elif args.scenario == 'SingleStream':
-        return RunnerBase(args.model, args.devices, ds, args.threads, post_proc=post_proc, tpu_kernel=args.tpu_kernel)
+        return RunnerBase(args.model,
+                          args.devices,
+                          ds,
+                          args.threads,
+                          post_proc=post_proc,
+                          tpu_kernel=args.tpu_kernel)
 
 
 def add_results(final_results, name, result_dict, result_list, took, show_accuracy=False):
@@ -191,8 +207,9 @@ def main():
     for _ in range(1):
         # img, label = dl.get_samples(sample_ids)
         shape = runner.info[list(runner.info.keys())[0]]['shape']
-        img = np.zeros(shape, dtype=np.float32)
-        img = img.reshape([1, 3, 640, 640])
+        data_type = nptype(runner.info[list(runner.info.keys())[0]]['dtype'])
+        img = np.ones(shape, dtype=data_type)
+        img = img.reshape(shape)
         runner.runner.put(img)
         task_id, results, valid = runner.runner.get()
         print(1)

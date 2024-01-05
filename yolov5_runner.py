@@ -9,7 +9,7 @@ from tqdm import trange
 # import by other means
 # from python.tpu_perf.infer import SGInfer
 
-from tpu_perf.infer import SGInfer
+from tpu_perf.infer import SGInfer, sgtype, nptype
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("main")
@@ -47,7 +47,6 @@ class RunnerBase:
         self.max_batchsize = next(info)['shape'][0]
         self.out_info = self.runner.get_output_info()
         self.result_timing = []
-        self.label_offset = 1
         self.waiting_queries = {}
         self.respond_cond = threading.Condition()
 
@@ -60,18 +59,19 @@ class RunnerBase:
         self.take_accuracy = take_accuracy
         self.post_process.start()
 
-    def process_result(self, qitem, task_id_res, results, valid):
+    def process_result(self, qitem, task_id, results, valid):
         try:
             if not valid:
                 raise RuntimeError("sgInfer exception, error {}".format(valid))
-            processed_results = self.post_process(results, qitem.content_index, qitem.label, self.result_dict, self.label_offset)
+            processed_results = self.post_process(results, qitem.content_index, qitem.label,
+                                                  self.result_dict)
             if self.take_accuracy:
                 self.post_process.add_results(processed_results)
             took = time.time() - qitem.start
             for _ in qitem.query_id:
                 self.result_timing.append(took)
         except Exception as ex:
-            pass
+            log.error("Failed to postprocess task_id: {}".format(task_id))
         finally:
             for idx, query_id in enumerate(qitem.query_id):
                 self.waiting_queries.pop(query_id)
@@ -142,8 +142,6 @@ class QueueRunner(RunnerBase):
             task_id, results, valid = self.runner.get()
             if task_id == 0:
                 break
-            # while task_id not in self.task_map:
-            #     continue
             qitem = self.task_map.pop(task_id)
             self.process_result(qitem, task_id, results, valid)
 

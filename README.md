@@ -49,3 +49,5 @@ python run.py --model=yolov5.bmodel --dataset_name="coco-640" --accuracy
 --model: 模型路径
 
 --dataset_name: 数据集配置
+
+--devices: TPU id
