@@ -71,7 +71,7 @@ class RunnerBase:
             for _ in qitem.query_id:
                 self.result_timing.append(took)
         except Exception as ex:
-            log.error("Failed to postprocess task_id: {}".format(task_id))
+            log.error("Failed to postprocess task_id: {}. Error msg: {}".format(task_id, ex))
         finally:
             for idx, query_id in enumerate(qitem.query_id):
                 self.waiting_queries.pop(query_id)

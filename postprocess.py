@@ -5,6 +5,9 @@ import time
 import json
 from pycocotools.cocoeval import COCOeval
 import pycocotools.coco as pycoco
+import logging
+
+log = logging.getLogger("postprocess")
 
 
 def cpu_postprocess_call(func):
@@ -15,10 +18,14 @@ def cpu_postprocess_call(func):
             pred = non_max_suppression(results[0], conf_thres=self.conf_thres, iou_thres=self.iou_thres, classes=None)
             det_boxes = []
             for i, p in enumerate(pred):
-                sample_ids = np.ones((p.shape[0], 1)) * ids[i]
-                self.content_ids.extend([ids[i]] * p.shape[0])
-                det_box = np.concatenate((sample_ids, p), axis=-1)
-                det_boxes.extend(list(det_box))
+                if p is None:
+                    log.info("img id {} has no dectection".format(ids[i]))
+                    continue
+                else:
+                    sample_ids = np.ones((p.shape[0], 1)) * ids[i]
+                    self.content_ids.extend([ids[i]] * p.shape[0])
+                    det_box = np.concatenate((sample_ids, p), axis=-1)
+                    det_boxes.extend(list(det_box))
             return det_boxes
         else:
             return func(*args, **kwargs)
@@ -91,8 +98,8 @@ def _nms(dets, scores, prob_threshold):
 
 def non_max_suppression(prediction, conf_thres=0.001, iou_thres=0.3, classes=None):
     if len(prediction) == 3:
-      prediction = [prediction['1'], prediction['2'], prediction['3']]
-      prediction = predict_preprocess(prediction)
+        prediction = [prediction['1'], prediction['2'], prediction['3']]
+        prediction = predict_preprocess(prediction)
     nc = prediction[0].shape[1] - 5  # number of classes
     xc = prediction[..., 4] > conf_thres  # candidates
 

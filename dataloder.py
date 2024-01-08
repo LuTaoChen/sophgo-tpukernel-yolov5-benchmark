@@ -7,7 +7,7 @@ import json
 import logging
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("coco")
+log = logging.getLogger("dataloder")
 
 
 class coco_loader(dataset.Dataset):
